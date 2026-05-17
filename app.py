@@ -11,7 +11,7 @@ from a7do.control.gait import update_gait_phase
 # Streamlit setup
 # --------------------------------------------------
 st.set_page_config(layout="wide")
-st.title("A7DOv13 — Standing & Walking (Controlled Physics)")
+st.title("A7DOv13 — Standing & Walking (With Impact Dynamics)")
 
 # --------------------------------------------------
 # Initialise state
@@ -25,23 +25,23 @@ if "t" not in st.session_state:
 state = st.session_state.state
 
 # --------------------------------------------------
-# Parameters (physically meaningful)
+# Parameters
 # --------------------------------------------------
 dt = 0.01
 g = 9.81
 l = 1.0
-m = 1.0          # normalised body mass
+m = 1.0
 
-kp = 25.0        # standing stiffness
-kd = 7.0         # standing damping
+kp = 25.0
+kd = 7.0
 
-# Natural sway (standing)
 A_sway = 0.02
 omega_sway = 1.0
 
-# Walking
 omega_gait = 2.0
 alpha_walk = 0.7
+
+impact_damping = 0.2   # ✅ THIS IS THE FIX
 
 # --------------------------------------------------
 # UI
@@ -83,18 +83,16 @@ else:
 # CONTROLLER REFERENCE
 # --------------------------------------------------
 if not walk_mode:
-    # Pure standing with sway
     x_sway = A_sway * math.sin(omega_sway * st.session_state.t)
     x_ref = x_center + x_sway
 else:
-    # Walking: lean only during early gait
     if state.gait_phase < math.pi:
         x_ref = walk_reference(x_center, bos_width, alpha_walk)
     else:
         x_ref = x_center
 
 # --------------------------------------------------
-# STANDING CONTROLLER (COM SPACE)
+# CONTROLLER
 # --------------------------------------------------
 tau = standing_controller(
     state.x_com,
@@ -105,21 +103,17 @@ tau = standing_controller(
 )
 
 # --------------------------------------------------
-# SUPPORT POINT (PHYSICS ANCHOR)
+# SUPPORT POINT
 # --------------------------------------------------
 if support_mode == "double":
-    # Two-foot support → anchor at BOS centre
     x_support = x_center
 else:
-    # Single-foot support
     x_support = bos_left if state.stance_foot == "L" else bos_right
 
 # --------------------------------------------------
-# CONTROLLED INVERTED PENDULUM PHYSICS
+# CONTROLLED INVERTED PENDULUM
 # --------------------------------------------------
-# x_ddot = (g/l)(x - x_support) + tau/(ml)
 x_ddot = (g / l) * (state.x_com - x_support) + tau / (m * l)
-
 state.x_com_dot += x_ddot * dt
 state.x_com += state.x_com_dot * dt
 
@@ -129,11 +123,12 @@ state.x_com += state.x_com_dot * dt
 x_cp = capture_point(state.x_com, state.x_com_dot, g, l)
 
 # --------------------------------------------------
-# STEP TRIGGER (ONLY IN WALK MODE)
+# STEP EVENT (WITH IMPACT)
 # --------------------------------------------------
 if walk_mode and support_mode == "single":
     if x_cp > bos_right or x_cp < bos_left:
-        # Place new foot at capture point
+
+        # New foot placement
         step_location = x_cp
 
         if state.stance_foot == "L":
@@ -143,7 +138,10 @@ if walk_mode and support_mode == "single":
             state.bos_left = step_location
             state.stance_foot = "L"
 
-        # Reset gait phase for next step
+        # ✅ IMPACT: RESET VELOCITY
+        state.x_com_dot *= impact_damping
+
+        # Reset gait phase
         state.gait_phase = 0.0
 
 # --------------------------------------------------
@@ -151,17 +149,16 @@ if walk_mode and support_mode == "single":
 # --------------------------------------------------
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("COM x", f"{state.x_com:.4f}")
-col2.metric("COM velocity", f"{state.x_com_dot:.4f}")
-col3.metric("Capture Point", f"{x_cp:.4f}")
+col1.metric("COM x", f"{state.x_com:.5f}")
+col2.metric("COM velocity", f"{state.x_com_dot:.5f}")
+col3.metric("Capture Point", f"{x_cp:.5f}")
 col4.metric("Gait Phase", f"{state.gait_phase:.2f}")
 
 st.write(
     f"Mode: {support_mode} | "
     f"BOS = [{state.bos_left:.3f}, {state.bos_right:.3f}] | "
     f"Support @ {x_support:.3f} | "
-    f"Stance = {state.stance_foot} | "
-    f"x_ref = {x_ref:.3f}"
+    f"Stance = {state.stance_foot}"
 )
 
 # --------------------------------------------------
