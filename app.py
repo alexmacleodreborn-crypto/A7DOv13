@@ -23,13 +23,15 @@ if "gait_phase" not in st.session_state:
     st.session_state.gait_phase = 0
 if "step_count" not in st.session_state:
     st.session_state.step_count = 0
+if "crawl_phase" not in st.session_state:
+    st.session_state.crawl_phase = 0
 if "atp" not in st.session_state:
     st.session_state.atp = ATP_max
 if "mode" not in st.session_state:
     st.session_state.mode = "stand"  # "stand", "walk", "sit", "crawl"
 
 # --- UI Buttons ---
-colA, colB, colC, colD, colE = st.columns(5)
+colA, colB, colC, colD, colE, colF = st.columns(6)
 with colA:
     do_step = st.button("STEP")
 with colB:
@@ -39,11 +41,14 @@ with colC:
 with colD:
     crawl = st.button("CRAWL")
 with colE:
+    crawl_step = st.button("CRAWL STEP")
+with colF:
     reset = st.button("RESET")
 
 if reset:
     st.session_state.gait_phase = 0
     st.session_state.step_count = 0
+    st.session_state.crawl_phase = 0
     st.session_state.atp = ATP_max
     st.session_state.mode = "stand"
 
@@ -61,8 +66,14 @@ if do_step:
     st.session_state.gait_phase += 1
     st.session_state.step_count += 1
 
+if crawl_step:
+    st.session_state.mode = "crawl"
+    st.session_state.crawl_phase += 1
+    st.session_state.step_count += 1
+
 # --- Gait Logic: Step-based, alternating legs ---
 phase = st.session_state.gait_phase % 2
+crawl_phase = st.session_state.crawl_phase % 4
 
 # --- Muscle Activation ---
 activation_leg_swing = 0.9
@@ -87,12 +98,44 @@ elif st.session_state.mode == "sit":
     shoulder_angle_L = np.deg2rad(-10)
     shoulder_angle_R = np.deg2rad(10)
 elif st.session_state.mode == "crawl":
-    # Crawling pose: hips and knees flexed, arms supporting, torso low
-    hip_angle_L = hip_angle_R = np.deg2rad(110)
-    knee_angle_L = knee_angle_R = np.deg2rad(110)
-    ankle_angle_L = ankle_angle_R = np.deg2rad(0)
-    shoulder_angle_L = np.deg2rad(70)
-    shoulder_angle_R = np.deg2rad(70)
+    # Contralateral crawl step pattern
+    # 0: Left arm/right leg swing; 1: Pause; 2: Right arm/left leg swing; 3: Pause
+    if crawl_phase == 0:
+        hip_angle_L = np.deg2rad(110)
+        knee_angle_L = np.deg2rad(110)
+        ankle_angle_L = np.deg2rad(0)
+        hip_angle_R = np.deg2rad(90)
+        knee_angle_R = np.deg2rad(90)
+        ankle_angle_R = np.deg2rad(0)
+        shoulder_angle_L = np.deg2rad(110)
+        shoulder_angle_R = np.deg2rad(70)
+    elif crawl_phase == 1:
+        hip_angle_L = np.deg2rad(90)
+        knee_angle_L = np.deg2rad(90)
+        ankle_angle_L = np.deg2rad(0)
+        hip_angle_R = np.deg2rad(90)
+        knee_angle_R = np.deg2rad(90)
+        ankle_angle_R = np.deg2rad(0)
+        shoulder_angle_L = np.deg2rad(70)
+        shoulder_angle_R = np.deg2rad(70)
+    elif crawl_phase == 2:
+        hip_angle_L = np.deg2rad(90)
+        knee_angle_L = np.deg2rad(90)
+        ankle_angle_L = np.deg2rad(0)
+        hip_angle_R = np.deg2rad(110)
+        knee_angle_R = np.deg2rad(110)
+        ankle_angle_R = np.deg2rad(0)
+        shoulder_angle_L = np.deg2rad(70)
+        shoulder_angle_R = np.deg2rad(110)
+    else:
+        hip_angle_L = np.deg2rad(90)
+        knee_angle_L = np.deg2rad(90)
+        ankle_angle_L = np.deg2rad(0)
+        hip_angle_R = np.deg2rad(90)
+        knee_angle_R = np.deg2rad(90)
+        ankle_angle_R = np.deg2rad(0)
+        shoulder_angle_L = np.deg2rad(70)
+        shoulder_angle_R = np.deg2rad(70)
 else:
     hip_angle_L = np.deg2rad(10) if phase == 0 else np.deg2rad(30)
     knee_angle_L = np.deg2rad(20) if phase == 0 else np.deg2rad(60)
