@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 st.set_page_config(layout="wide")
-st.title("A7DOv13 — Step-Based Anatomical Walker (with Arm Motion)")
+st.title("A7DOv13 — Step-Based Anatomical Walker (Full Muscles & Joints)")
 
 # --- Parameters ---
 L_thigh = 0.12
@@ -14,12 +14,18 @@ head_radius = 0.03
 L_upperarm = 0.10
 L_forearm = 0.10
 shoulder_width = 0.10
+I_joint = 0.01
+Fmax = 100
+moment_arm = 0.04
+ATP_max = 100.0
 
 # --- State ---
 if "gait_phase" not in st.session_state:
     st.session_state.gait_phase = 0
 if "step_count" not in st.session_state:
     st.session_state.step_count = 0
+if "atp" not in st.session_state:
+    st.session_state.atp = ATP_max
 
 # --- Step Button ---
 do_step = st.button("STEP")
@@ -28,6 +34,7 @@ reset = st.button("RESET")
 if reset:
     st.session_state.gait_phase = 0
     st.session_state.step_count = 0
+    st.session_state.atp = ATP_max
 
 if do_step:
     st.session_state.gait_phase += 1
@@ -37,7 +44,15 @@ if do_step:
 phase = st.session_state.gait_phase % 2
 # Left stance, right swing (phase 0); Right stance, left swing (phase 1)
 
-# Joint angles for each leg (simple realistic pattern)
+# --- Muscle Activation (simple: swing = high, stance = low) ---
+activation_leg_swing = 0.9
+activation_leg_stance = 0.3
+activation_arm_swing = 0.8
+activation_arm_stance = 0.2
+C_fatigue = st.session_state.atp / ATP_max
+
+# --- Joint Angles ---
+# Legs
 hip_angle_L = np.deg2rad(10) if phase == 0 else np.deg2rad(30)
 knee_angle_L = np.deg2rad(20) if phase == 0 else np.deg2rad(60)
 ankle_angle_L = np.deg2rad(-5) if phase == 0 else np.deg2rad(10)
@@ -46,12 +61,36 @@ hip_angle_R = np.deg2rad(30) if phase == 0 else np.deg2rad(10)
 knee_angle_R = np.deg2rad(60) if phase == 0 else np.deg2rad(20)
 ankle_angle_R = np.deg2rad(10) if phase == 0 else np.deg2rad(-5)
 
-# --- Arm swing: opposite to legs ---
-# Shoulder angles: swing amplitude 30 deg
+# Arms (swing opposite to legs)
 shoulder_angle_L = np.deg2rad(-30) if phase == 0 else np.deg2rad(30)
 shoulder_angle_R = np.deg2rad(30) if phase == 0 else np.deg2rad(-30)
 elbow_angle_L = np.deg2rad(20)
 elbow_angle_R = np.deg2rad(20)
+
+# --- Muscle Forces & Torques ---
+# Hip L
+F_hip_agon_L = Fmax * (activation_leg_stance if phase == 0 else activation_leg_swing) * C_fatigue
+F_hip_ant_L = Fmax * (1 - (activation_leg_stance if phase == 0 else activation_leg_swing)) * C_fatigue
+tau_hip_L = moment_arm * (F_hip_agon_L - F_hip_ant_L)
+# Hip R
+F_hip_agon_R = Fmax * (activation_leg_swing if phase == 0 else activation_leg_stance) * C_fatigue
+F_hip_ant_R = Fmax * (1 - (activation_leg_swing if phase == 0 else activation_leg_stance)) * C_fatigue
+tau_hip_R = moment_arm * (F_hip_agon_R - F_hip_ant_R)
+# Shoulder L
+F_shoulder_agon_L = Fmax * (activation_arm_swing if phase == 1 else activation_arm_stance) * C_fatigue
+F_shoulder_ant_L = Fmax * (1 - (activation_arm_swing if phase == 1 else activation_arm_stance)) * C_fatigue
+tau_shoulder_L = moment_arm * (F_shoulder_agon_L - F_shoulder_ant_L)
+# Shoulder R
+F_shoulder_agon_R = Fmax * (activation_arm_swing if phase == 0 else activation_arm_stance) * C_fatigue
+F_shoulder_ant_R = Fmax * (1 - (activation_arm_swing if phase == 0 else activation_arm_stance)) * C_fatigue
+tau_shoulder_R = moment_arm * (F_shoulder_agon_R - F_shoulder_ant_R)
+
+# ATP drain
+st.session_state.atp -= (
+    abs(F_hip_agon_L) + abs(F_hip_agon_R) +
+    abs(F_shoulder_agon_L) + abs(F_shoulder_agon_R)
+) * 0.0001
+if st.session_state.atp < 0: st.session_state.atp = 0
 
 # --- Forward Kinematics ---
 hip_x, hip_y = 0.0, 0.08
@@ -124,5 +163,9 @@ st.markdown(f"""
 Step count: {st.session_state.step_count}  
 Gait phase: {st.session_state.gait_phase % 2}  
 Stance: {"Left" if phase == 0 else "Right"}  
-Arms swing opposite to legs
+ATP: {st.session_state.atp:.1f}  
+Hip L torque: {tau_hip_L:.2f}  
+Hip R torque: {tau_hip_R:.2f}  
+Shoulder L torque: {tau_shoulder_L:.2f}  
+Shoulder R torque: {tau_shoulder_R:.2f}  
 """)
