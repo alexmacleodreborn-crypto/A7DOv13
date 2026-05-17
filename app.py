@@ -82,6 +82,7 @@ activation_arm_swing = 0.8
 activation_arm_stance = 0.2
 activation_sit = 0.4
 activation_crawl = 0.6
+activation_crawl_elbow = 0.85 if st.session_state.mode == "crawl" else 0.5
 C_fatigue = st.session_state.atp / ATP_max
 
 # --- Joint Angles ---
@@ -109,6 +110,8 @@ elif st.session_state.mode == "crawl":
         ankle_angle_R = np.deg2rad(0)
         shoulder_angle_L = np.deg2rad(110)
         shoulder_angle_R = np.deg2rad(70)
+        elbow_angle_L = np.deg2rad(110)
+        elbow_angle_R = np.deg2rad(70)
     elif crawl_phase == 1:
         hip_angle_L = np.deg2rad(90)
         knee_angle_L = np.deg2rad(90)
@@ -118,6 +121,8 @@ elif st.session_state.mode == "crawl":
         ankle_angle_R = np.deg2rad(0)
         shoulder_angle_L = np.deg2rad(70)
         shoulder_angle_R = np.deg2rad(70)
+        elbow_angle_L = np.deg2rad(70)
+        elbow_angle_R = np.deg2rad(70)
     elif crawl_phase == 2:
         hip_angle_L = np.deg2rad(90)
         knee_angle_L = np.deg2rad(90)
@@ -127,6 +132,8 @@ elif st.session_state.mode == "crawl":
         ankle_angle_R = np.deg2rad(0)
         shoulder_angle_L = np.deg2rad(70)
         shoulder_angle_R = np.deg2rad(110)
+        elbow_angle_L = np.deg2rad(70)
+        elbow_angle_R = np.deg2rad(110)
     else:
         hip_angle_L = np.deg2rad(90)
         knee_angle_L = np.deg2rad(90)
@@ -136,6 +143,8 @@ elif st.session_state.mode == "crawl":
         ankle_angle_R = np.deg2rad(0)
         shoulder_angle_L = np.deg2rad(70)
         shoulder_angle_R = np.deg2rad(70)
+        elbow_angle_L = np.deg2rad(70)
+        elbow_angle_R = np.deg2rad(70)
 else:
     hip_angle_L = np.deg2rad(10) if phase == 0 else np.deg2rad(30)
     knee_angle_L = np.deg2rad(20) if phase == 0 else np.deg2rad(60)
@@ -145,8 +154,7 @@ else:
     ankle_angle_R = np.deg2rad(10) if phase == 0 else np.deg2rad(-5)
     shoulder_angle_L = np.deg2rad(-30) if phase == 0 else np.deg2rad(30)
     shoulder_angle_R = np.deg2rad(30) if phase == 0 else np.deg2rad(-30)
-
-elbow_angle_L = elbow_angle_R = np.deg2rad(20)
+    elbow_angle_L = elbow_angle_R = np.deg2rad(20)
 
 # --- Muscle Forces & Torques ---
 def muscle_torque(activation, C_fatigue):
@@ -175,9 +183,9 @@ tau_shoulder_L, F_shoulder_agon_L, F_shoulder_ant_L = muscle_torque(
     activation_crawl if st.session_state.mode == "crawl" else activation_arm_stance if st.session_state.mode == "sit" else (activation_arm_swing if phase == 1 and st.session_state.mode == "walk" else activation_arm_stance), C_fatigue)
 tau_shoulder_R, F_shoulder_agon_R, F_shoulder_ant_R = muscle_torque(
     activation_crawl if st.session_state.mode == "crawl" else activation_arm_stance if st.session_state.mode == "sit" else (activation_arm_swing if phase == 0 and st.session_state.mode == "walk" else activation_arm_stance), C_fatigue)
-# Elbows
-tau_elbow_L, F_elbow_agon_L, F_elbow_ant_L = muscle_torque(0.5, C_fatigue)
-tau_elbow_R, F_elbow_agon_R, F_elbow_ant_R = muscle_torque(0.5, C_fatigue)
+# Elbows (crawl-specific activation)
+tau_elbow_L, F_elbow_agon_L, F_elbow_ant_L = muscle_torque(activation_crawl_elbow, C_fatigue)
+tau_elbow_R, F_elbow_agon_R, F_elbow_ant_R = muscle_torque(activation_crawl_elbow, C_fatigue)
 
 # --- ATP drain per joint ---
 atp_drain = (
@@ -262,3 +270,10 @@ Shoulder R torque: {tau_shoulder_R:.2f}
 Elbow L torque: {tau_elbow_L:.2f}  
 Elbow R torque: {tau_elbow_R:.2f}  
 """)
+
+if st.session_state.mode == "crawl":
+    st.markdown(f"""
+    Elbow L torque (crawl): {tau_elbow_L:.2f}  
+    Elbow R torque (crawl): {tau_elbow_R:.2f}  
+    Elbow activation (crawl): {activation_crawl_elbow:.2f}
+    """)
