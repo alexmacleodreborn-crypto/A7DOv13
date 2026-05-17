@@ -2,7 +2,7 @@ import streamlit as st
 import matplotlib.pyplot as plt
 
 st.set_page_config(layout="wide")
-st.title("A7DOv13 — Step-Based Walking (Full Body Visualisation)")
+st.title("A7DOv13 — Step-Based Walking (Knees & Hips Visualisation)")
 
 # Persistent state
 if "x_com" not in st.session_state:
@@ -27,7 +27,9 @@ torso_height = 0.18
 head_radius = 0.03
 shoulder_width = 0.08
 arm_length = 0.12
+hip_width = 0.06
 leg_length = 0.15
+knee_height = 0.05   # height of knee above foot
 
 # UI
 colA, colB = st.columns(2)
@@ -66,7 +68,7 @@ col3.metric("BOS Right", f"{st.session_state.bos_right:.3f}")
 col4.metric("Steps", st.session_state.step_count)
 st.write(f"Stance foot: {st.session_state.stance_foot}")
 
-# Full Body Visualisation
+# Full Body Visualisation with Knees & Hips
 fig, ax = plt.subplots(figsize=(4, 3))
 
 # Draw ground
@@ -76,13 +78,31 @@ ax.plot([st.session_state.bos_left - 0.05, st.session_state.bos_right + 0.05], [
 ax.plot([st.session_state.bos_left], [0], 'o', color='blue', markersize=10, label='Left Foot')
 ax.plot([st.session_state.bos_right], [0], 'o', color='red', markersize=10, label='Right Foot')
 
-# Draw legs
-ax.plot([st.session_state.x_com, st.session_state.bos_left], [0.08, 0], 'brown', lw=4)
-ax.plot([st.session_state.x_com, st.session_state.bos_right], [0.08, 0], 'brown', lw=4)
+# Calculate hip positions
+hip_y = 0.08
+hip_left = st.session_state.x_com - hip_width / 2
+hip_right = st.session_state.x_com + hip_width / 2
+
+# Draw hips
+ax.plot([hip_left, hip_right], [hip_y, hip_y], 'c-', lw=6)
+
+# Calculate knee positions
+knee_left_x = (hip_left + st.session_state.bos_left) / 2
+knee_right_x = (hip_right + st.session_state.bos_right) / 2
+knee_left_y = knee_height
+knee_right_y = knee_height
+
+# Draw legs with knees
+# Left leg: hip_left -> knee_left -> bos_left
+ax.plot([hip_left, knee_left_x], [hip_y, knee_left_y], 'brown', lw=4)
+ax.plot([knee_left_x, st.session_state.bos_left], [knee_left_y, 0], 'brown', lw=4)
+# Right leg: hip_right -> knee_right -> bos_right
+ax.plot([hip_right, knee_right_x], [hip_y, knee_right_y], 'brown', lw=4)
+ax.plot([knee_right_x, st.session_state.bos_right], [knee_right_y, 0], 'brown', lw=4)
 
 # Draw torso
-torso_top_y = 0.08 + torso_height
-ax.plot([st.session_state.x_com, st.session_state.x_com], [0.08, torso_top_y], 'g-', lw=6)
+torso_top_y = hip_y + torso_height
+ax.plot([st.session_state.x_com, st.session_state.x_com], [hip_y, torso_top_y], 'g-', lw=6)
 
 # Draw shoulders
 shoulder_y = torso_top_y
@@ -117,8 +137,9 @@ st.markdown("""
 
 - Every click on STEP moves the full body forward
 - Feet alternate left/right
+- Knees and hips are shown in the stick figure
 - COM always stays between feet
-- Stick figure shows legs, torso, arms, head, stance
+- Stick figure shows legs, knees, hips, torso, arms, head, stance
 - Motion is obvious and visible
 
 This is intentional. We are validating walking structure and full body geometry, not continuous physics.
