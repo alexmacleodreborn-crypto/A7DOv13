@@ -1,11 +1,6 @@
 import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
-
-from body import default_body
-from muscles import default_muscles, muscle_force
-from joints import default_joints, joint_torque
-from development import stages, stage_from_growth
 from dna import init_dna, grow, developmental_mode
 
 st.set_page_config(layout="wide")
@@ -25,35 +20,20 @@ muscle_strength = st.session_state.DNA["muscle_strength"]
 ATP_max = st.session_state.DNA["ATP_max"]
 organs = st.session_state.DNA["organ_development"]
 
-body = default_body()
-muscles = default_muscles()
-joints = default_joints()
-
-for seg in limb_lengths:
-    if "limb_lengths" in body:
-        body["limb_lengths"][seg] = limb_lengths[seg]
-for joint in muscle_strength:
-    muscles["muscle_strength"][joint] = muscle_strength[joint]
-muscles["ATP_max"] = ATP_max
-
+# Set joint angles based on mode
 if mode == "emwomb":
-    joints["angles"]["hip"] = joints["angles"]["knee"] = 0
+    hip_angle = knee_angle = 0
 elif mode == "sit":
-    joints["angles"]["hip"] = joints["angles"]["knee"] = np.deg2rad(90)
+    hip_angle = knee_angle = np.deg2rad(90)
 elif mode == "crawl":
-    joints["angles"]["hip"] = joints["angles"]["knee"] = np.deg2rad(110)
+    hip_angle = knee_angle = np.deg2rad(110)
 elif mode == "stand":
-    joints["angles"]["hip"] = joints["angles"]["knee"] = np.deg2rad(15)
+    hip_angle = knee_angle = np.deg2rad(15)
 elif mode == "walk":
-    joints["angles"]["hip"] = np.deg2rad(30)
-    joints["angles"]["knee"] = np.deg2rad(60)
+    hip_angle = np.deg2rad(30)
+    knee_angle = np.deg2rad(60)
 else:
-    joints["angles"]["hip"] = joints["angles"]["knee"] = np.deg2rad(10)
-
-F_hip = muscle_force(muscles["muscle_strength"]["hip"], muscles["activation"]["hip"], muscles["fatigue"])
-F_knee = muscle_force(muscles["muscle_strength"]["knee"], muscles["activation"]["knee"], muscles["fatigue"])
-tau_hip = joint_torque(0.04, F_hip, F_hip * 0.5)
-tau_knee = joint_torque(0.04, F_knee, F_knee * 0.5)
+    hip_angle = knee_angle = np.deg2rad(10)
 
 hip_x, hip_y = 0.0, 0.08
 thigh_L = limb_lengths["thigh"]
@@ -61,9 +41,6 @@ shank_L = limb_lengths["shank"]
 foot_L = limb_lengths["foot"]
 torso_L = limb_lengths["torso"]
 head_radius = 0.03
-
-hip_angle = joints["angles"]["hip"]
-knee_angle = joints["angles"]["knee"]
 
 knee_x = hip_x - thigh_L * np.sin(hip_angle)
 knee_y = hip_y - thigh_L * np.cos(hip_angle)
@@ -105,7 +82,5 @@ Lungs maturity: {lungs_maturity:.2f}
 Spine maturity: {spine_maturity:.2f}  
 DNA limb lengths: {limb_lengths}  
 DNA muscle strengths: {muscle_strength}  
-ATP max: {ATP_max}  
-Hip torque: {tau_hip:.2f}  
-Knee torque: {tau_knee:.2f}
+ATP max: {ATP_max}
 """)
