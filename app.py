@@ -12,7 +12,7 @@ from a7do.control.gait import update_gait_phase
 # Streamlit setup
 # --------------------------------------------------
 st.set_page_config(layout="wide")
-st.title("A7DOv13 — Standing → Walking (Closed Loop)")
+st.title("A7DOv13 — Standing → Walking (Corrected Physics)")
 
 # --------------------------------------------------
 # Initialise state
@@ -35,15 +35,11 @@ l = 1.0
 kp = 20.0
 kd = 6.0
 
-# Standing sway
 A_sway = 0.02
 omega_sway = 1.0
 
-# Walking
 omega_gait = 2.0
 alpha_walk = 0.7
-
-bos_width = state.bos_right - state.bos_left
 
 # --------------------------------------------------
 # UI
@@ -56,12 +52,22 @@ walk_mode = st.checkbox("Initiate Walk")
 st.session_state.t += dt
 
 # --------------------------------------------------
-# BOS centre
+# Current BOS and stance foot
 # --------------------------------------------------
-x_center = (state.bos_left + state.bos_right) / 2
+bos_left = state.bos_left
+bos_right = state.bos_right
+x_center = (bos_left + bos_right) / 2
+
+# Define stance foot position
+if state.stance_foot == "L":
+    x_foot = bos_left
+else:
+    x_foot = bos_right
+
+bos_width = bos_right - bos_left
 
 # --------------------------------------------------
-# Gait phase update (only while walking)
+# Gait phase
 # --------------------------------------------------
 if walk_mode:
     state.gait_phase = update_gait_phase(
@@ -73,21 +79,20 @@ else:
     state.gait_phase = 0.0
 
 # --------------------------------------------------
-# Reference selection
+# Reference (what controller wants)
 # --------------------------------------------------
 if not walk_mode:
-    # Normal standing with sway
     x_sway = A_sway * math.sin(omega_sway * st.session_state.t)
     x_ref = x_center + x_sway
 else:
-    # Walking: periodic bias then recenter
+    # Lean only during first half of gait
     if state.gait_phase < math.pi:
         x_ref = walk_reference(x_center, bos_width, alpha_walk)
     else:
         x_ref = x_center
 
 # --------------------------------------------------
-# Standing controller (always active)
+# Standing controller (always)
 # --------------------------------------------------
 tau = standing_controller(
     state.x_com,
@@ -98,12 +103,12 @@ tau = standing_controller(
 )
 
 # --------------------------------------------------
-# Physics step (stance foot at BOS centre)
+# PHYSICS — THIS IS THE CRITICAL FIX
 # --------------------------------------------------
 state.x_com, state.x_com_dot = step_inverted_pendulum(
     state.x_com,
     state.x_com_dot,
-    x_center,
+    x_foot,     # ✅ USE STANCE FOOT
     g,
     l,
     dt
@@ -115,21 +120,21 @@ state.x_com, state.x_com_dot = step_inverted_pendulum(
 x_cp = capture_point(state.x_com, state.x_com_dot, g, l)
 
 # --------------------------------------------------
-# Step trigger — CLOSE THE LOOP
+# STEP TRIGGER (capture exits BOS)
 # --------------------------------------------------
 if walk_mode:
-    if x_cp > state.bos_right or x_cp < state.bos_left:
-        # Step distance = capture error
-        step = x_cp - x_center
+    if x_cp > bos_right or x_cp < bos_left:
+        # Place new foot at capture point
+        step_location = x_cp
 
-        # Move BOS forward
-        state.bos_left += step
-        state.bos_right += step
+        if state.stance_foot == "L":
+            state.bos_right = step_location
+            state.stance_foot = "R"
+        else:
+            state.bos_left = step_location
+            state.stance_foot = "L"
 
-        # Swap stance foot (conceptual)
-        state.stance_foot = "R" if state.stance_foot == "L" else "L"
-
-        # Reset gait phase for next step
+        # Reset gait phase
         state.gait_phase = 0.0
 
 # --------------------------------------------------
@@ -144,7 +149,7 @@ col4.metric("Gait Phase", f"{state.gait_phase:.2f}")
 
 st.write(
     f"BOS = [{state.bos_left:.3f}, {state.bos_right:.3f}] | "
-    f"x_ref = {x_ref:.3f} | stance = {state.stance_foot}"
+    f"stance = {state.stance_foot} | x_ref = {x_ref:.3f}"
 )
 
 # --------------------------------------------------
