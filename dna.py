@@ -1,4 +1,3 @@
-# dna.py
 def init_dna():
     return {
         "limb_lengths": {k: 0.01 for k in ["thigh", "shank", "foot", "torso", "upperarm", "forearm"]},
