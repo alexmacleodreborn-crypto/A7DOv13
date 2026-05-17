@@ -1,146 +1,72 @@
 import streamlit as st
 import matplotlib.pyplot as plt
+import numpy as np
 
 st.set_page_config(layout="wide")
-st.title("A7DOv13 — Step-Based Walking (Knees & Hips Visualisation)")
+st.title("A7DOv13 — Anatomical Walking (Linked to Equations)")
 
-# Persistent state
-if "x_com" not in st.session_state:
-    st.session_state.x_com = 0.0
-
-if "bos_left" not in st.session_state:
-    st.session_state.bos_left = -0.1
-
-if "bos_right" not in st.session_state:
-    st.session_state.bos_right = 0.1
-
-if "stance_foot" not in st.session_state:
-    st.session_state.stance_foot = "L"
-
-if "step_count" not in st.session_state:
-    st.session_state.step_count = 0
+# State variables for anatomical joints
+if "hip_angle" not in st.session_state:
+    st.session_state.hip_angle = np.deg2rad(10)  # radians
+if "knee_angle" not in st.session_state:
+    st.session_state.knee_angle = np.deg2rad(20)
+if "ankle_angle" not in st.session_state:
+    st.session_state.ankle_angle = np.deg2rad(-5)
+if "atp" not in st.session_state:
+    st.session_state.atp = 100.0
 
 # Parameters
-step_length = 0.15   # metres per step
-com_advance = 0.08   # COM shift per step
+thigh_length = 0.12
+shank_length = 0.12
+foot_length = 0.08
 torso_height = 0.18
 head_radius = 0.03
-shoulder_width = 0.08
-arm_length = 0.12
-hip_width = 0.06
-leg_length = 0.15
-knee_height = 0.05   # height of knee above foot
 
-# UI
-colA, colB = st.columns(2)
-with colA:
-    do_step = st.button("STEP")
-with colB:
-    reset = st.button("RESET")
+# Muscle force and torque equations (example)
+Fmax = 100
+activation = 0.8
+C_fatigue = st.session_state.atp / 100.0
+moment_arm = 0.04
 
-# Reset logic
-if reset:
-    st.session_state.x_com = 0.0
-    st.session_state.bos_left = -0.1
-    st.session_state.bos_right = 0.1
-    st.session_state.stance_foot = "L"
-    st.session_state.step_count = 0
+# Calculate muscle forces
+F_agonist = Fmax * activation * C_fatigue
+F_antagonist = Fmax * (1 - activation) * C_fatigue
+tau_knee = moment_arm * (F_agonist - F_antagonist)
 
-# Step logic
-if do_step:
-    st.session_state.x_com += com_advance
-    if st.session_state.stance_foot == "L":
-        st.session_state.bos_right = st.session_state.x_com + step_length / 2
-        st.session_state.stance_foot = "R"
-    else:
-        st.session_state.bos_left = st.session_state.x_com - step_length / 2
-        st.session_state.stance_foot = "L"
-    st.session_state.x_com = (
-        st.session_state.bos_left + st.session_state.bos_right
-    ) / 2
-    st.session_state.step_count += 1
+# Joint dynamics (simplified)
+I_knee = 0.01
+knee_accel = tau_knee / I_knee
+st.session_state.knee_angle += knee_accel * 0.01  # dt
 
-# Metrics
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("COM x", f"{st.session_state.x_com:.3f}")
-col2.metric("BOS Left", f"{st.session_state.bos_left:.3f}")
-col3.metric("BOS Right", f"{st.session_state.bos_right:.3f}")
-col4.metric("Steps", st.session_state.step_count)
-st.write(f"Stance foot: {st.session_state.stance_foot}")
+# ATP drain
+st.session_state.atp -= abs(F_agonist) * 0.0001
 
-# Full Body Visualisation with Knees & Hips
+# Forward kinematics for stick figure
+hip_x, hip_y = 0.0, 0.08
+knee_x = hip_x + thigh_length * np.sin(st.session_state.hip_angle)
+knee_y = hip_y - thigh_length * np.cos(st.session_state.hip_angle)
+ankle_x = knee_x + shank_length * np.sin(st.session_state.knee_angle)
+ankle_y = knee_y - shank_length * np.cos(st.session_state.knee_angle)
+foot_x = ankle_x + foot_length * np.sin(st.session_state.ankle_angle)
+foot_y = ankle_y - foot_length * np.cos(st.session_state.ankle_angle)
+
+# Visualisation
 fig, ax = plt.subplots(figsize=(4, 3))
-
-# Draw ground
-ax.plot([st.session_state.bos_left - 0.05, st.session_state.bos_right + 0.05], [0, 0], 'k-', lw=2)
-
-# Draw feet
-ax.plot([st.session_state.bos_left], [0], 'o', color='blue', markersize=10, label='Left Foot')
-ax.plot([st.session_state.bos_right], [0], 'o', color='red', markersize=10, label='Right Foot')
-
-# Calculate hip positions
-hip_y = 0.08
-hip_left = st.session_state.x_com - hip_width / 2
-hip_right = st.session_state.x_com + hip_width / 2
-
-# Draw hips
-ax.plot([hip_left, hip_right], [hip_y, hip_y], 'c-', lw=6)
-
-# Calculate knee positions
-knee_left_x = (hip_left + st.session_state.bos_left) / 2
-knee_right_x = (hip_right + st.session_state.bos_right) / 2
-knee_left_y = knee_height
-knee_right_y = knee_height
-
-# Draw legs with knees
-# Left leg: hip_left -> knee_left -> bos_left
-ax.plot([hip_left, knee_left_x], [hip_y, knee_left_y], 'brown', lw=4)
-ax.plot([knee_left_x, st.session_state.bos_left], [knee_left_y, 0], 'brown', lw=4)
-# Right leg: hip_right -> knee_right -> bos_right
-ax.plot([hip_right, knee_right_x], [hip_y, knee_right_y], 'brown', lw=4)
-ax.plot([knee_right_x, st.session_state.bos_right], [knee_right_y, 0], 'brown', lw=4)
-
-# Draw torso
-torso_top_y = hip_y + torso_height
-ax.plot([st.session_state.x_com, st.session_state.x_com], [hip_y, torso_top_y], 'g-', lw=6)
-
-# Draw shoulders
-shoulder_y = torso_top_y
-shoulder_left = st.session_state.x_com - shoulder_width / 2
-shoulder_right = st.session_state.x_com + shoulder_width / 2
-ax.plot([shoulder_left, shoulder_right], [shoulder_y, shoulder_y], 'g-', lw=6)
-
-# Draw arms
-ax.plot([shoulder_left, shoulder_left], [shoulder_y, shoulder_y - arm_length], 'purple', lw=4)
-ax.plot([shoulder_right, shoulder_right], [shoulder_y, shoulder_y - arm_length], 'purple', lw=4)
-
-# Draw head
-head_y = shoulder_y + head_radius + 0.01
-head = plt.Circle((st.session_state.x_com, head_y), head_radius, color='orange', zorder=10)
+ax.plot([hip_x, knee_x], [hip_y, knee_y], 'brown', lw=4, label='Thigh')
+ax.plot([knee_x, ankle_x], [knee_y, ankle_y], 'brown', lw=4, label='Shank')
+ax.plot([ankle_x, foot_x], [ankle_y, foot_y], 'brown', lw=4, label='Foot')
+ax.plot([hip_x, hip_x], [hip_y, hip_y + torso_height], 'g-', lw=6, label='Torso')
+head_y = hip_y + torso_height + head_radius + 0.01
+head = plt.Circle((hip_x, head_y), head_radius, color='orange', zorder=10)
 ax.add_patch(head)
-
-# Highlight stance foot
-if st.session_state.stance_foot == "L":
-    ax.plot([st.session_state.bos_left], [0], 'o', color='lime', markersize=14, label='Stance')
-else:
-    ax.plot([st.session_state.bos_right], [0], 'o', color='lime', markersize=14, label='Stance')
-
-ax.set_xlim(st.session_state.bos_left - 0.2, st.session_state.bos_right + 0.2)
+ax.set_xlim(-0.2, 0.2)
 ax.set_ylim(-0.05, head_y + head_radius + 0.05)
 ax.axis('off')
 ax.legend(loc='upper right', fontsize=8)
-
 st.pyplot(fig)
 
-st.markdown("""
-### What you should see
-
-- Every click on STEP moves the full body forward
-- Feet alternate left/right
-- Knees and hips are shown in the stick figure
-- COM always stays between feet
-- Stick figure shows legs, knees, hips, torso, arms, head, stance
-- Motion is obvious and visible
-
-This is intentional. We are validating walking structure and full body geometry, not continuous physics.
+st.markdown(f"""
+ATP: {st.session_state.atp:.1f}  
+Knee torque: {tau_knee:.2f}  
+Knee angle: {np.rad2deg(st.session_state.knee_angle):.1f}°
 """)
