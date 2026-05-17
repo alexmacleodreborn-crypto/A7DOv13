@@ -45,72 +45,67 @@ phase = st.session_state.gait_phase % 2
 crawl_phase = st.session_state.crawl_phase % 4
 C_fatigue = st.session_state.atp / ATP_max
 
-# --- Joint Angles ---
-if st.session_state.mode == "stand":
-    hip_L = hip_R = np.deg2rad(15); knee_L = knee_R = np.deg2rad(20)
-    ankle_L = ankle_R = np.deg2rad(0); shoulder_L = np.deg2rad(-10); shoulder_R = np.deg2rad(10)
-    elbow_L = elbow_R = np.deg2rad(20)
-elif st.session_state.mode == "sit":
-    hip_L = hip_R = knee_L = knee_R = np.deg2rad(90)
-    ankle_L = ankle_R = np.deg2rad(0); shoulder_L = np.deg2rad(-10); shoulder_R = np.deg2rad(10)
-    elbow_L = elbow_R = np.deg2rad(20)
-elif st.session_state.mode == "crawl":
-    # Contralateral crawl step pattern
-    if crawl_phase == 0:
-        hip_L, knee_L, ankle_L = np.deg2rad(110), np.deg2rad(110), 0
-        hip_R, knee_R, ankle_R = np.deg2rad(90), np.deg2rad(90), 0
-        shoulder_L, shoulder_R = np.deg2rad(110), np.deg2rad(70)
-        elbow_L, elbow_R = np.deg2rad(110), np.deg2rad(70)
-    elif crawl_phase == 1 or crawl_phase == 3:
-        hip_L = hip_R = knee_L = knee_R = np.deg2rad(90)
-        ankle_L = ankle_R = 0; shoulder_L = shoulder_R = np.deg2rad(70)
-        elbow_L = elbow_R = np.deg2rad(70)
-    else:
-        hip_L, knee_L, ankle_L = np.deg2rad(90), np.deg2rad(90), 0
-        hip_R, knee_R, ankle_R = np.deg2rad(110), np.deg2rad(110), 0
-        shoulder_L, shoulder_R = np.deg2rad(70), np.deg2rad(110)
-        elbow_L, elbow_R = np.deg2rad(70), np.deg2rad(110)
-else:
-    hip_L = np.deg2rad(10) if phase == 0 else np.deg2rad(30)
-    knee_L = np.deg2rad(20) if phase == 0 else np.deg2rad(60)
-    ankle_L = np.deg2rad(-5) if phase == 0 else np.deg2rad(10)
-    hip_R = np.deg2rad(30) if phase == 0 else np.deg2rad(10)
-    knee_R = np.deg2rad(60) if phase == 0 else np.deg2rad(20)
-    ankle_R = np.deg2rad(10) if phase == 0 else np.deg2rad(-5)
-    shoulder_L = np.deg2rad(-30) if phase == 0 else np.deg2rad(30)
-    shoulder_R = np.deg2rad(30) if phase == 0 else np.deg2rad(-30)
-    elbow_L = elbow_R = np.deg2rad(20)
+# --- Joint Angles & Muscle Activation ---
+def get_angles_and_activation(mode, phase, crawl_phase):
+    # Default activations
+    act_leg_swing, act_leg_stance = 0.9, 0.3
+    act_arm_swing, act_arm_stance = 0.8, 0.2
+    act_sit, act_crawl, act_crawl_elbow = 0.4, 0.6, 0.85
 
-# --- Muscle Forces & Torques ---
+    if mode == "stand":
+        angles = [15, 15, 20, 20, 0, 0, -10, 10, 20, 20]
+        acts = [act_leg_stance]*6 + [act_arm_stance]*2 + [0.5, 0.5]
+    elif mode == "sit":
+        angles = [90, 90, 90, 90, 0, 0, -10, 10, 20, 20]
+        acts = [act_sit]*6 + [act_arm_stance]*2 + [0.5, 0.5]
+    elif mode == "crawl":
+        # Contralateral crawl step pattern
+        if crawl_phase == 0:
+            angles = [110, 90, 110, 90, 0, 0, 110, 70, 110, 70]
+        elif crawl_phase == 1 or crawl_phase == 3:
+            angles = [90, 90, 90, 90, 0, 0, 70, 70, 70, 70]
+        else:
+            angles = [90, 110, 90, 110, 0, 0, 70, 110, 70, 110]
+        acts = [act_crawl]*6 + [act_crawl]*2 + [act_crawl_elbow, act_crawl_elbow]
+    else:  # walk
+        if phase == 0:
+            angles = [10, 30, 20, 60, -5, 10, -30, 30, 20, 20]
+            acts = [act_leg_swing, act_leg_stance, act_leg_swing, act_leg_stance,
+                    act_leg_swing, act_leg_stance, act_arm_swing, act_arm_stance, 0.5, 0.5]
+        else:
+            angles = [30, 10, 60, 20, 10, -5, 30, -30, 20, 20]
+            acts = [act_leg_stance, act_leg_swing, act_leg_stance, act_leg_swing,
+                    act_leg_stance, act_leg_swing, act_arm_stance, act_arm_swing, 0.5, 0.5]
+    # Angles: hip_L, hip_R, knee_L, knee_R, ankle_L, ankle_R, shoulder_L, shoulder_R, elbow_L, elbow_R
+    return [np.deg2rad(a) for a in angles], acts
+
+angles, acts = get_angles_and_activation(st.session_state.mode, phase, crawl_phase)
+(hip_L, hip_R, knee_L, knee_R, ankle_L, ankle_R, shoulder_L, shoulder_R, elbow_L, elbow_R) = angles
+(act_hip_L, act_hip_R, act_knee_L, act_knee_R, act_ankle_L, act_ankle_R, act_shoulder_L, act_shoulder_R, act_elbow_L, act_elbow_R) = acts
+
 def muscle_torque(activation):
     F_agon = Fmax * activation * C_fatigue
     F_ant = Fmax * (1 - activation) * C_fatigue
     tau = moment_arm * (F_agon - F_ant)
-    return tau, F_agon, F_ant, activation
+    return tau, activation
 
-def act(mode, swing, stance, crawl, sit, phase, is_L):
-    if mode == "crawl": return crawl
-    if mode == "sit": return sit
-    if mode == "stand": return stance
-    return swing if (phase == 0 if is_L else phase == 1) else stance
-
-tau_hip_L, _, _, act_hip_L = muscle_torque(act(st.session_state.mode, activation_leg_swing, activation_leg_stance, activation_crawl, activation_sit, phase, True))
-tau_hip_R, _, _, act_hip_R = muscle_torque(act(st.session_state.mode, activation_leg_swing, activation_leg_stance, activation_crawl, activation_sit, phase, False))
-tau_knee_L, _, _, act_knee_L = muscle_torque(act(st.session_state.mode, activation_leg_swing, activation_leg_stance, activation_crawl, activation_sit, phase, True))
-tau_knee_R, _, _, act_knee_R = muscle_torque(act(st.session_state.mode, activation_leg_swing, activation_leg_stance, activation_crawl, activation_sit, phase, False))
-tau_ankle_L, _, _, act_ankle_L = muscle_torque(act(st.session_state.mode, activation_leg_swing, activation_leg_stance, activation_crawl, activation_sit, phase, True))
-tau_ankle_R, _, _, act_ankle_R = muscle_torque(act(st.session_state.mode, activation_leg_swing, activation_leg_stance, activation_crawl, activation_sit, phase, False))
-tau_shoulder_L, _, _, act_shoulder_L = muscle_torque(act(st.session_state.mode, activation_arm_swing, activation_arm_stance, activation_crawl, activation_sit, phase, True))
-tau_shoulder_R, _, _, act_shoulder_R = muscle_torque(act(st.session_state.mode, activation_arm_swing, activation_arm_stance, activation_crawl, activation_sit, phase, False))
-tau_elbow_L, _, _, act_elbow_L = muscle_torque(0.85 if st.session_state.mode == "crawl" else 0.5)
-tau_elbow_R, _, _, act_elbow_R = muscle_torque(0.85 if st.session_state.mode == "crawl" else 0.5)
+tau_hip_L, _ = muscle_torque(act_hip_L)
+tau_hip_R, _ = muscle_torque(act_hip_R)
+tau_knee_L, _ = muscle_torque(act_knee_L)
+tau_knee_R, _ = muscle_torque(act_knee_R)
+tau_ankle_L, _ = muscle_torque(act_ankle_L)
+tau_ankle_R, _ = muscle_torque(act_ankle_R)
+tau_shoulder_L, _ = muscle_torque(act_shoulder_L)
+tau_shoulder_R, _ = muscle_torque(act_shoulder_R)
+tau_elbow_L, _ = muscle_torque(act_elbow_L)
+tau_elbow_R, _ = muscle_torque(act_elbow_R)
 
 # --- ATP drain per joint ---
-atp_drain = sum([
-    abs(tau_hip_L), abs(tau_hip_R), abs(tau_knee_L), abs(tau_knee_R),
-    abs(tau_ankle_L), abs(tau_ankle_R), abs(tau_shoulder_L), abs(tau_shoulder_R),
-    abs(tau_elbow_L), abs(tau_elbow_R)
-]) * 0.001
+atp_drain = sum(map(abs, [
+    tau_hip_L, tau_hip_R, tau_knee_L, tau_knee_R,
+    tau_ankle_L, tau_ankle_R, tau_shoulder_L, tau_shoulder_R,
+    tau_elbow_L, tau_elbow_R
+])) * 0.001
 st.session_state.atp = max(0, st.session_state.atp - atp_drain)
 
 # --- Forward Kinematics ---
@@ -140,7 +135,6 @@ wrist_x_R = elbow_x_R + L_forearm * np.sin(shoulder_R + elbow_R)
 wrist_y_R = elbow_y_R - L_forearm * np.cos(shoulder_R + elbow_R)
 
 def limb_colour(activation):
-    # Map activation [0,1] to red (high) or blue (low)
     return (activation, 0, 1 - activation)
 
 fig, ax = plt.subplots(figsize=(4, 3))
