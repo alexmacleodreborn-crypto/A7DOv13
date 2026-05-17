@@ -11,7 +11,7 @@ from a7do.control.gait import update_gait_phase
 # Streamlit setup
 # --------------------------------------------------
 st.set_page_config(layout="wide")
-st.title("A7DOv13 — Standing & Walking (With Impact Dynamics)")
+st.title("A7DOv13 — Standing → Walking (Double Support Correct)")
 
 # --------------------------------------------------
 # Initialise state
@@ -21,6 +21,12 @@ if "state" not in st.session_state:
 
 if "t" not in st.session_state:
     st.session_state.t = 0.0
+
+if "support_phase" not in st.session_state:
+    st.session_state.support_phase = "double"   # 'double' or 'single'
+
+if "ds_timer" not in st.session_state:
+    st.session_state.ds_timer = 0.0              # double support timer
 
 state = st.session_state.state
 
@@ -41,7 +47,8 @@ omega_sway = 1.0
 omega_gait = 2.0
 alpha_walk = 0.7
 
-impact_damping = 0.2   # ✅ THIS IS THE FIX
+double_support_duration = 0.15   # seconds
+impact_damping = 0.25            # velocity loss on landing
 
 # --------------------------------------------------
 # UI
@@ -62,11 +69,6 @@ x_center = (bos_left + bos_right) / 2
 bos_width = bos_right - bos_left
 
 # --------------------------------------------------
-# SUPPORT MODE
-# --------------------------------------------------
-support_mode = "single" if walk_mode else "double"
-
-# --------------------------------------------------
 # GAIT PHASE
 # --------------------------------------------------
 if walk_mode:
@@ -78,15 +80,27 @@ if walk_mode:
 else:
     state.gait_phase = 0.0
     state.stance_foot = "L"
+    st.session_state.support_phase = "double"
+    st.session_state.ds_timer = 0.0
+
+# --------------------------------------------------
+# SUPPORT PHASE LOGIC (THE KEY FIX)
+# --------------------------------------------------
+if st.session_state.support_phase == "double":
+    st.session_state.ds_timer += dt
+    if st.session_state.ds_timer >= double_support_duration and walk_mode:
+        st.session_state.support_phase = "single"
+        st.session_state.ds_timer = 0.0
 
 # --------------------------------------------------
 # CONTROLLER REFERENCE
 # --------------------------------------------------
 if not walk_mode:
+    # Pure standing
     x_sway = A_sway * math.sin(omega_sway * st.session_state.t)
     x_ref = x_center + x_sway
 else:
-    if state.gait_phase < math.pi:
+    if st.session_state.support_phase == "single" and state.gait_phase < math.pi:
         x_ref = walk_reference(x_center, bos_width, alpha_walk)
     else:
         x_ref = x_center
@@ -103,9 +117,9 @@ tau = standing_controller(
 )
 
 # --------------------------------------------------
-# SUPPORT POINT
+# PHYSICS SUPPORT POINT
 # --------------------------------------------------
-if support_mode == "double":
+if st.session_state.support_phase == "double":
     x_support = x_center
 else:
     x_support = bos_left if state.stance_foot == "L" else bos_right
@@ -123,12 +137,10 @@ state.x_com += state.x_com_dot * dt
 x_cp = capture_point(state.x_com, state.x_com_dot, g, l)
 
 # --------------------------------------------------
-# STEP EVENT (WITH IMPACT)
+# STEP EVENT (END OF SINGLE SUPPORT)
 # --------------------------------------------------
-if walk_mode and support_mode == "single":
+if walk_mode and st.session_state.support_phase == "single":
     if x_cp > bos_right or x_cp < bos_left:
-
-        # New foot placement
         step_location = x_cp
 
         if state.stance_foot == "L":
@@ -138,24 +150,26 @@ if walk_mode and support_mode == "single":
             state.bos_left = step_location
             state.stance_foot = "L"
 
-        # ✅ IMPACT: RESET VELOCITY
+        # Impact dynamics
         state.x_com_dot *= impact_damping
 
-        # Reset gait phase
+        # Enter double support
+        st.session_state.support_phase = "double"
+        st.session_state.ds_timer = 0.0
         state.gait_phase = 0.0
 
 # --------------------------------------------------
 # UI
 # --------------------------------------------------
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 col1.metric("COM x", f"{state.x_com:.5f}")
 col2.metric("COM velocity", f"{state.x_com_dot:.5f}")
 col3.metric("Capture Point", f"{x_cp:.5f}")
 col4.metric("Gait Phase", f"{state.gait_phase:.2f}")
+col5.metric("Support", st.session_state.support_phase)
 
 st.write(
-    f"Mode: {support_mode} | "
     f"BOS = [{state.bos_left:.3f}, {state.bos_right:.3f}] | "
     f"Support @ {x_support:.3f} | "
     f"Stance = {state.stance_foot}"
