@@ -1,5 +1,6 @@
-def walk_bias(x_ref, bos_width, alpha=0.7):
+def walk_reference(x_center, bos_width, alpha=0.7):
     """
-    Intentional destabilisation for walk initiation
+    Bias the standing reference to intentionally
+    push capture point outside BOS.
     """
-    return x_ref + alpha * bos_width
+    return x_center + alpha * bos_width
