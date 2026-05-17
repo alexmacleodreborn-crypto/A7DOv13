@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 st.set_page_config(layout="wide")
-st.title("A7DOv13 — Step-Based Anatomical Walker (Sit/Stand/Step)")
+st.title("A7DOv13 — Anatomical Walker (Stand/Step/Sit, Muscles & Joints)")
 
 # --- Parameters ---
 L_thigh = 0.12
@@ -14,7 +14,6 @@ head_radius = 0.03
 L_upperarm = 0.10
 L_forearm = 0.10
 shoulder_width = 0.10
-I_joint = 0.01
 Fmax = 100
 moment_arm = 0.04
 ATP_max = 100.0
@@ -27,7 +26,7 @@ if "step_count" not in st.session_state:
 if "atp" not in st.session_state:
     st.session_state.atp = ATP_max
 if "mode" not in st.session_state:
-    st.session_state.mode = "stand"  # "stand", "walk", or "sit"
+    st.session_state.mode = "stand"  # "stand", "walk", "sit"
 
 # --- UI Buttons ---
 colA, colB, colC, colD = st.columns(4)
@@ -60,7 +59,7 @@ if do_step:
 # --- Gait Logic: Step-based, alternating legs ---
 phase = st.session_state.gait_phase % 2
 
-# --- Muscle Activation (simple: swing = high, stance = low) ---
+# --- Muscle Activation ---
 activation_leg_swing = 0.9
 activation_leg_stance = 0.3
 activation_arm_swing = 0.8
@@ -70,21 +69,18 @@ C_fatigue = st.session_state.atp / ATP_max
 
 # --- Joint Angles ---
 if st.session_state.mode == "stand":
-    # Standing pose
     hip_angle_L = hip_angle_R = np.deg2rad(15)
     knee_angle_L = knee_angle_R = np.deg2rad(20)
     ankle_angle_L = ankle_angle_R = np.deg2rad(0)
     shoulder_angle_L = np.deg2rad(-10)
     shoulder_angle_R = np.deg2rad(10)
 elif st.session_state.mode == "sit":
-    # Sitting pose (hips and knees flexed, ankles neutral, arms relaxed)
     hip_angle_L = hip_angle_R = np.deg2rad(90)
     knee_angle_L = knee_angle_R = np.deg2rad(90)
     ankle_angle_L = ankle_angle_R = np.deg2rad(0)
     shoulder_angle_L = np.deg2rad(-10)
     shoulder_angle_R = np.deg2rad(10)
 else:
-    # Walking pose
     hip_angle_L = np.deg2rad(10) if phase == 0 else np.deg2rad(30)
     knee_angle_L = np.deg2rad(20) if phase == 0 else np.deg2rad(60)
     ankle_angle_L = np.deg2rad(-5) if phase == 0 else np.deg2rad(10)
@@ -96,7 +92,7 @@ else:
 
 elbow_angle_L = elbow_angle_R = np.deg2rad(20)
 
-# --- Muscle Forces & Torques (all pairs, all joints) ---
+# --- Muscle Forces & Torques ---
 def muscle_torque(activation, C_fatigue):
     F_agon = Fmax * activation * C_fatigue
     F_ant = Fmax * (1 - activation) * C_fatigue
@@ -140,7 +136,6 @@ if st.session_state.atp < 0: st.session_state.atp = 0
 
 # --- Forward Kinematics ---
 hip_x, hip_y = 0.0, 0.08
-# Shoulders
 shoulder_y = hip_y + L_torso
 shoulder_left_x = hip_x - shoulder_width / 2
 shoulder_right_x = hip_x + shoulder_width / 2
@@ -173,31 +168,22 @@ wrist_y_R = elbow_y_R - L_forearm * np.cos(shoulder_angle_R + elbow_angle_R)
 
 # --- Visualisation ---
 fig, ax = plt.subplots(figsize=(4, 3))
-# Ground
 ax.plot([-0.2, 0.2], [0, 0], 'k-', lw=2)
-# Left leg
 ax.plot([hip_x, knee_x_L], [hip_y, knee_y_L], 'brown', lw=4)
 ax.plot([knee_x_L, ankle_x_L], [knee_y_L, ankle_y_L], 'brown', lw=4)
 ax.plot([ankle_x_L, foot_x_L], [ankle_y_L, foot_y_L], 'brown', lw=4)
-# Right leg
 ax.plot([hip_x, knee_x_R], [hip_y, knee_y_R], 'blue', lw=4)
 ax.plot([knee_x_R, ankle_x_R], [knee_y_R, ankle_y_R], 'blue', lw=4)
 ax.plot([ankle_x_R, foot_x_R], [ankle_y_R, foot_y_R], 'blue', lw=4)
-# Torso
 ax.plot([hip_x, hip_x], [hip_y, shoulder_y], 'g-', lw=6)
-# Shoulders
 ax.plot([shoulder_left_x, shoulder_right_x], [shoulder_y, shoulder_y], 'g-', lw=6)
-# Head
 head_y = shoulder_y + head_radius + 0.01
 head = plt.Circle((hip_x, head_y), head_radius, color='orange', zorder=10)
 ax.add_patch(head)
-# Left arm
 ax.plot([shoulder_left_x, elbow_x_L], [shoulder_y, elbow_y_L], 'purple', lw=4)
 ax.plot([elbow_x_L, wrist_x_L], [elbow_y_L, wrist_y_L], 'purple', lw=4)
-# Right arm
 ax.plot([shoulder_right_x, elbow_x_R], [shoulder_y, elbow_y_R], 'purple', lw=4)
 ax.plot([elbow_x_R, wrist_x_R], [elbow_y_R, wrist_y_R], 'purple', lw=4)
-# Feet
 ax.plot([foot_x_L], [foot_y_L], 'o', color='red', markersize=10)
 ax.plot([foot_x_R], [foot_y_R], 'o', color='blue', markersize=10)
 ax.set_xlim(-0.2, 0.2)
