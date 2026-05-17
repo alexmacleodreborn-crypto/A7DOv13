@@ -11,10 +11,10 @@ from a7do.control.gait import update_gait_phase
 # Streamlit setup
 # ==================================================
 st.set_page_config(layout="wide")
-st.title("A7DOv13 — Standing & Walking (Physically Correct Hybrid Model)")
+st.title("A7DOv13 — Standing & Walking (Final Correct Model)")
 
 # ==================================================
-# Initialise state
+# Initialise persistent state
 # ==================================================
 if "state" not in st.session_state:
     st.session_state.state = A7DOState()
@@ -38,7 +38,7 @@ g = 9.81
 l = 1.0
 m = 1.0
 
-# Standing control gains
+# Standing control
 kp = 25.0
 kd = 7.0
 
@@ -49,8 +49,9 @@ omega_sway = 1.0
 # Walking
 omega_gait = 2.0
 alpha_walk = 0.7
-double_support_duration = 0.15   # seconds
-impact_damping = 0.25            # velocity loss on landing
+double_support_duration = 0.15
+impact_damping = 0.25
+initiation_velocity = 0.05   # ✅ walk intent impulse
 
 # ==================================================
 # UI
@@ -86,13 +87,17 @@ else:
     st.session_state.ds_timer = 0.0
 
 # ==================================================
-# SUPPORT PHASE LOGIC
+# SUPPORT PHASE TRANSITIONS
 # ==================================================
 if st.session_state.support_phase == "double":
     st.session_state.ds_timer += dt
     if walk_mode and st.session_state.ds_timer >= double_support_duration:
+        # Enter single support with intent
         st.session_state.support_phase = "single"
         st.session_state.ds_timer = 0.0
+
+        # ✅ CRITICAL: walk initiation impulse
+        state.x_com_dot = initiation_velocity
 
 # ==================================================
 # CONTROLLER REFERENCE
@@ -102,13 +107,14 @@ if not walk_mode:
     x_sway = A_sway * math.sin(omega_sway * st.session_state.t)
     x_ref = x_center + x_sway
 else:
+    # Walking lean only during early single support
     if st.session_state.support_phase == "single" and state.gait_phase < math.pi:
         x_ref = walk_reference(x_center, bos_width, alpha_walk)
     else:
         x_ref = x_center
 
 # ==================================================
-# CONTROLLER (used only in standing & lean)
+# CONTROLLER (used only for standing / lean shaping)
 # ==================================================
 tau = standing_controller(
     state.x_com,
@@ -119,36 +125,30 @@ tau = standing_controller(
 )
 
 # ==================================================
-# PHYSICS UPDATE (CRITICAL CORRECTION)
+# PHYSICS UPDATE
 # ==================================================
 if st.session_state.support_phase == "double":
-    # ----------------------------------------------
-    # DOUBLE SUPPORT = KINEMATIC CONSTRAINT
-    # ----------------------------------------------
+    # ✅ Double support = kinematic constraint
     state.x_com = x_center
     state.x_com_dot = 0.0
 
 else:
-    # ----------------------------------------------
-    # SINGLE SUPPORT = INVERTED PENDULUM
-    # ----------------------------------------------
+    # ✅ Single support = pure inverted pendulum
     x_support = bos_left if state.stance_foot == "L" else bos_right
-
     x_ddot = (g / l) * (state.x_com - x_support)
     state.x_com_dot += x_ddot * dt
     state.x_com += state.x_com_dot * dt
 
 # ==================================================
-# CAPTURE POINT (VALID ONLY IN SINGLE SUPPORT)
+# CAPTURE POINT
 # ==================================================
 x_cp = capture_point(state.x_com, state.x_com_dot, g, l)
 
 # ==================================================
-# STEP EVENT
+# STEP EVENT (end of single support)
 # ==================================================
 if walk_mode and st.session_state.support_phase == "single":
     if x_cp > bos_right or x_cp < bos_left:
-
         step_location = x_cp
 
         if state.stance_foot == "L":
@@ -167,14 +167,16 @@ if walk_mode and st.session_state.support_phase == "single":
         state.gait_phase = 0.0
 
 # ==================================================
-# UI
+# UI DISPLAY
 # ==================================================
+gait_norm = state.gait_phase / (2 * math.pi)
+
 col1, col2, col3, col4, col5 = st.columns(5)
 
 col1.metric("COM x", f"{state.x_com:.6f}")
 col2.metric("COM velocity", f"{state.x_com_dot:.6f}")
 col3.metric("Capture Point", f"{x_cp:.6f}")
-col4.metric("Gait Phase", f"{state.gait_phase:.2f}")
+col4.metric("Gait Phase (0–1)", f"{gait_norm:.2f}")
 col5.metric("Support", st.session_state.support_phase)
 
 st.write(
