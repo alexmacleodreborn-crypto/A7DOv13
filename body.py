@@ -1,4 +1,3 @@
-# body.py
 def default_body():
     return {
         "segment_mass": {
