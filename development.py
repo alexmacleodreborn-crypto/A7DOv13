@@ -1,4 +1,3 @@
-# development.py
 def stages():
     return ["emwomb", "sit", "crawl", "stand", "walk", "run"]
 
