@@ -1,4 +1,3 @@
-# muscles.py
 def default_muscles():
     return {
         "muscle_strength": {
