@@ -11,30 +11,24 @@ from dna import init_dna, grow, developmental_mode
 st.set_page_config(layout="wide")
 st.title("A7DOv13 — Modular Developmental Organism")
 
-# --- DNA initialisation ---
 if "DNA" not in st.session_state:
     st.session_state.DNA = init_dna()
 
-# --- Grow button ---
 if st.button("GROW"):
     st.session_state.DNA = grow(st.session_state.DNA)
 
-# --- Mode selection from DNA ---
 mode = developmental_mode(st.session_state.DNA)
 st.session_state.mode = mode
 
-# --- Use DNA values for segment lengths and strengths ---
 limb_lengths = st.session_state.DNA["limb_lengths"]
 muscle_strength = st.session_state.DNA["muscle_strength"]
 ATP_max = st.session_state.DNA["ATP_max"]
 organs = st.session_state.DNA["organ_development"]
 
-# --- Body, Muscles, Joints initialisation ---
 body = default_body()
 muscles = default_muscles()
 joints = default_joints()
 
-# --- Override body/muscles with DNA values ---
 for seg in limb_lengths:
     if "limb_lengths" in body:
         body["limb_lengths"][seg] = limb_lengths[seg]
@@ -42,7 +36,6 @@ for joint in muscle_strength:
     muscles["muscle_strength"][joint] = muscle_strength[joint]
 muscles["ATP_max"] = ATP_max
 
-# --- Set joint angles based on mode ---
 if mode == "emwomb":
     joints["angles"]["hip"] = joints["angles"]["knee"] = 0
 elif mode == "sit":
@@ -57,13 +50,11 @@ elif mode == "walk":
 else:
     joints["angles"]["hip"] = joints["angles"]["knee"] = np.deg2rad(10)
 
-# --- Calculate muscle forces and torques ---
 F_hip = muscle_force(muscles["muscle_strength"]["hip"], muscles["activation"]["hip"], muscles["fatigue"])
 F_knee = muscle_force(muscles["muscle_strength"]["knee"], muscles["activation"]["knee"], muscles["fatigue"])
 tau_hip = joint_torque(0.04, F_hip, F_hip * 0.5)
 tau_knee = joint_torque(0.04, F_knee, F_knee * 0.5)
 
-# --- Forward kinematics (left leg only for demo) ---
 hip_x, hip_y = 0.0, 0.08
 thigh_L = limb_lengths["thigh"]
 shank_L = limb_lengths["shank"]
@@ -84,7 +75,6 @@ shoulder_y = hip_y + torso_L
 head_y = shoulder_y + head_radius + 0.01
 
 fig, ax = plt.subplots(figsize=(4, 3))
-# Organs
 heart_maturity = organs["heart"]
 lungs_maturity = organs["lungs"]
 spine_maturity = organs["spine"]
@@ -95,7 +85,6 @@ ax.add_patch(plt.Circle((0.025, 0.13), 0.018 * lungs_maturity, color=(0, 0.5, 1,
 ax.plot([0, 0], [0.08, 0.13], color='brown', lw=2 + 4 * spine_maturity)
 if cord_attached:
     ax.plot([0, -0.1], [0.08, 0.0], color='orange', lw=2)
-# Body
 ax.plot([hip_x, knee_x], [hip_y, knee_y], 'brown', lw=4)
 ax.plot([knee_x, ankle_x], [knee_y, ankle_y], 'brown', lw=4)
 ax.plot([ankle_x, foot_x], [ankle_y, foot_y], 'brown', lw=4)
