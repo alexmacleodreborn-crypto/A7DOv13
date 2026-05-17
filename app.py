@@ -1,11 +1,12 @@
 import streamlit as st
+import matplotlib.pyplot as plt
 
 # ==================================================
-# A7DO — STEP-BASED WALKING (VISIBLE & DEBUGGABLE)
+# A7DOv13 — Step-Based Walking with Visualisation
 # ==================================================
 
 st.set_page_config(layout="wide")
-st.title("A7DOv13 — Step-Based Walking (Correct for Streamlit)")
+st.title("A7DOv13 — Step-Based Walking (Stick Figure Visualisation)")
 
 # ==================================================
 # Persistent state
@@ -88,14 +89,46 @@ st.write(
     f"Stance foot: {st.session_state.stance_foot}"
 )
 
+# ==================================================
+# Stick Figure Visualisation
+# ==================================================
+fig, ax = plt.subplots(figsize=(4, 2))
+
+# Draw ground
+ax.plot([st.session_state.bos_left - 0.05, st.session_state.bos_right + 0.05], [0, 0], 'k-', lw=2)
+
+# Draw feet
+ax.plot([st.session_state.bos_left], [0], 'o', color='blue', markersize=10, label='Left Foot')
+ax.plot([st.session_state.bos_right], [0], 'o', color='red', markersize=10, label='Right Foot')
+
+# Draw COM (body)
+ax.plot([st.session_state.x_com], [0.15], 'o', color='green', markersize=12, label='COM')
+ax.plot([st.session_state.x_com, st.session_state.x_com], [0, 0.15], 'g-', lw=3)
+
+# Draw stance foot highlight
+if st.session_state.stance_foot == "L":
+    ax.plot([st.session_state.bos_left], [0], 'o', color='lime', markersize=14, label='Stance')
+else:
+    ax.plot([st.session_state.bos_right], [0], 'o', color='lime', markersize=14, label='Stance')
+
+ax.set_xlim(st.session_state.bos_left - 0.1, st.session_state.bos_right + 0.1)
+ax.set_ylim(-0.05, 0.2)
+ax.axis('off')
+ax.legend(loc='upper right', fontsize=8)
+
+st.pyplot(fig)
+
+# ==================================================
+# Explanation
+# ==================================================
 st.markdown("""
 ### What you should see
 
 - Every click on STEP moves the body forward
 - Feet alternate left/right
 - COM always stays between feet
+- Stick figure visualisation shows feet, body, stance
 - Motion is obvious and visible
 
-This is intentional.
-We are validating walking structure, not continuous physics.
+This is intentional. We are validating walking structure, not continuous physics.
 """)
