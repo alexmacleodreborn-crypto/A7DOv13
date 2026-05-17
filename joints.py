@@ -1,4 +1,3 @@
-# joints.py
 def default_joints():
     return {
         "angles": {
