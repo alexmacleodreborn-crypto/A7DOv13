@@ -12,7 +12,7 @@ from a7do.control.gait import update_gait_phase
 # Streamlit setup
 # --------------------------------------------------
 st.set_page_config(layout="wide")
-st.title("A7DOv13 — Standing → Walking (Corrected Physics)")
+st.title("A7DOv13 — Standing & Walking (Correct Support Logic)")
 
 # --------------------------------------------------
 # Initialise state
@@ -32,8 +32,8 @@ dt = 0.01
 g = 9.81
 l = 1.0
 
-kp = 20.0
-kd = 6.0
+kp = 25.0
+kd = 7.0
 
 A_sway = 0.02
 omega_sway = 1.0
@@ -52,22 +52,23 @@ walk_mode = st.checkbox("Initiate Walk")
 st.session_state.t += dt
 
 # --------------------------------------------------
-# Current BOS and stance foot
+# BOS
 # --------------------------------------------------
 bos_left = state.bos_left
 bos_right = state.bos_right
 x_center = (bos_left + bos_right) / 2
-
-# Define stance foot position
-if state.stance_foot == "L":
-    x_foot = bos_left
-else:
-    x_foot = bos_right
-
 bos_width = bos_right - bos_left
 
 # --------------------------------------------------
-# Gait phase
+# SUPPORT MODE (CRITICAL)
+# --------------------------------------------------
+if walk_mode:
+    support_mode = "single"
+else:
+    support_mode = "double"
+
+# --------------------------------------------------
+# GAIT PHASE
 # --------------------------------------------------
 if walk_mode:
     state.gait_phase = update_gait_phase(
@@ -76,23 +77,26 @@ if walk_mode:
         dt
     )
 else:
+    # FULL RESET when not walking
     state.gait_phase = 0.0
+    state.stance_foot = "L"
 
 # --------------------------------------------------
-# Reference (what controller wants)
+# CONTROLLER REFERENCE
 # --------------------------------------------------
 if not walk_mode:
+    # PURE STANDING
     x_sway = A_sway * math.sin(omega_sway * st.session_state.t)
     x_ref = x_center + x_sway
 else:
-    # Lean only during first half of gait
+    # WALKING: bias only in early gait
     if state.gait_phase < math.pi:
         x_ref = walk_reference(x_center, bos_width, alpha_walk)
     else:
         x_ref = x_center
 
 # --------------------------------------------------
-# Standing controller (always)
+# STANDING CONTROLLER
 # --------------------------------------------------
 tau = standing_controller(
     state.x_com,
@@ -103,28 +107,40 @@ tau = standing_controller(
 )
 
 # --------------------------------------------------
-# PHYSICS — THIS IS THE CRITICAL FIX
+# PHYSICS SUPPORT POINT (THE FIX)
+# --------------------------------------------------
+if support_mode == "double":
+    # BOTH FEET → SUPPORT AT BOS CENTRE
+    x_support = x_center
+else:
+    # SINGLE FOOT SUPPORT
+    if state.stance_foot == "L":
+        x_support = bos_left
+    else:
+        x_support = bos_right
+
+# --------------------------------------------------
+# PHYSICS STEP
 # --------------------------------------------------
 state.x_com, state.x_com_dot = step_inverted_pendulum(
     state.x_com,
     state.x_com_dot,
-    x_foot,     # ✅ USE STANCE FOOT
+    x_support,
     g,
     l,
     dt
 )
 
 # --------------------------------------------------
-# Capture point
+# CAPTURE POINT
 # --------------------------------------------------
 x_cp = capture_point(state.x_com, state.x_com_dot, g, l)
 
 # --------------------------------------------------
-# STEP TRIGGER (capture exits BOS)
+# STEP TRIGGER (ONLY IN WALK MODE)
 # --------------------------------------------------
-if walk_mode:
+if walk_mode and support_mode == "single":
     if x_cp > bos_right or x_cp < bos_left:
-        # Place new foot at capture point
         step_location = x_cp
 
         if state.stance_foot == "L":
@@ -134,7 +150,6 @@ if walk_mode:
             state.bos_left = step_location
             state.stance_foot = "L"
 
-        # Reset gait phase
         state.gait_phase = 0.0
 
 # --------------------------------------------------
@@ -148,11 +163,13 @@ col3.metric("Capture Point", f"{x_cp:.4f}")
 col4.metric("Gait Phase", f"{state.gait_phase:.2f}")
 
 st.write(
+    f"Mode: {support_mode} | "
     f"BOS = [{state.bos_left:.3f}, {state.bos_right:.3f}] | "
-    f"stance = {state.stance_foot} | x_ref = {x_ref:.3f}"
+    f"Support @ {x_support:.3f} | "
+    f"Stance = {state.stance_foot}"
 )
 
 # --------------------------------------------------
-# Save state
+# SAVE STATE
 # --------------------------------------------------
 st.session_state.state = state
